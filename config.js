@@ -5,7 +5,7 @@ window.COIL_CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzKxrxXmeAQnY5EG9Bc0JfEHbbwfdVNDDephiEn8mM9i-JaJup9XU98INJNBMphojjHIQ/exec',
 
   // Options shown when signing a coil in
-  WIDTHS: [135, 166, 188],               // mm
+  WIDTHS: [135, 166, 182],               // mm
   THICKNESSES: [0.55, 0.75, 0.95, 1.15], // BMT
   DEFAULT_GRADE: 'G550',
 };
