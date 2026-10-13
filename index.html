@@ -324,7 +324,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 15px; }
 /* =====================================================================
    CH Engineering Coil Tracker — front end
    ===================================================================== */
-const CFG = Object.assign({ API_URL: '', WIDTHS: [135, 166, 188], THICKNESSES: [0.55, 0.75, 0.95, 1.15], DEFAULT_GRADE: 'G550' }, window.COIL_CONFIG || {});
+const CFG = Object.assign({ API_URL: '', WIDTHS: [135, 166, 182], THICKNESSES: [0.55, 0.75, 0.95, 1.15], DEFAULT_GRADE: 'G550' }, window.COIL_CONFIG || {});
 const DEMO = !CFG.API_URL;
 const QR_PREFIX = 'CHE|';
 // Logo built into the page so it always shows, wherever the app is opened from
@@ -1233,10 +1233,10 @@ function demoSeed() {
   });
   const coils = [
     mk('Steel & Tube', '7731045', 166, 0.75, 2380, 20), mk('Steel & Tube', '7731046', 166, 0.75, 2410, 20),
-    mk('Steel & Tube', '7731102', 188, 0.95, 2960, 14), mk('Steel & Tube', '7731103', 188, 0.95, 2915, 14, 3, 'Demo Worker'),
+    mk('Steel & Tube', '7731102', 182, 0.95, 2960, 14), mk('Steel & Tube', '7731103', 182, 0.95, 2915, 14, 3, 'Demo Worker'),
     mk('Steel & Tube', '7731220', 135, 0.55, 1650, 9), mk('Steel & Tube', '7731221', 135, 0.55, 1630, 9, 1, 'Demo Worker'),
     mk('Steel & Tube', '7731310', 166, 1.15, 3120, 0), mk('Steel & Tube', '7730987', 166, 0.75, 2400, 40, 2, 'Demo Worker'),
-    mk('Fletcher Steel', 'FS-55120', 188, 0.75, 2550, 25), mk('Fletcher Steel', 'FS-55121', 135, 0.95, 1880, 6, 0, 'Demo Admin'),
+    mk('Fletcher Steel', 'FS-55120', 182, 0.75, 2550, 25), mk('Fletcher Steel', 'FS-55121', 135, 0.95, 1880, 6, 0, 'Demo Admin'),
   ];
   return { coils, suppliers: sup, crew: [{ name: 'Demo Admin', pin: '1234', role: 'Admin', active: true }, { name: 'Demo Worker', pin: '0000', role: 'Worker', active: true }] };
 }
