@@ -1,7 +1,7 @@
 // Lets the app open from the home screen like a normal app.
 // Always tries the network first so updates show straight away; falls back to the saved copy if offline.
 const CACHE = 'coil-tracker-v1';
-const SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
+const SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-192.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
