@@ -348,6 +348,10 @@ const kg = n => Math.round(Number(n) || 0).toLocaleString('en-NZ') + ' kg';
 const bmt = t => Number(t).toFixed(2);
 const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
 const monthKey = d => d.toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland', year: 'numeric', month: '2-digit' }).slice(0, 7);
+// The month a used coil counts in: a pushed-to-next-month override if set, otherwise the month it was scanned out
+const effMonth = c => c.countsIn || (c.scannedOutAt ? monthKey(new Date(c.scannedOutAt)) : '');
+const nextMonthKey = k => { const [y, m] = k.split('-').map(Number); return m === 12 ? (y + 1) + '-01' : y + '-' + String(m + 1).padStart(2, '0'); };
+const monthLong = k => new Date(k + '-15T00:00:00').toLocaleDateString('en-NZ', { month: 'long' });
 function fmtDate(iso, withTime) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -959,14 +963,38 @@ async function renderMonthly() {
         <tr class="sum"><td colspan="2">Total</td><td class="n">${r.used.length}</td><td class="n">${kg(r.usedKg)}</td></tr></tbody></table></div>`
         : '<p class="sec-sub">No coils scanned out in this month.</p>'}
     </section>
-    ${r.used.length ? `<section class="panel"><h3>Coils used</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Coil</th><th>Size</th><th>Scanned out</th><th class="n">Weight</th></tr></thead><tbody>
-      ${r.used.map(c => `<tr><td><b>${esc(c.coilId)}</b><br><span class="cell-sub">${esc(c.supplier)}${c.consignment ? ', consignment' : ''}</span></td><td>${c.width} × ${bmt(c.thickness)}</td><td>${fmtDate(c.scannedOutAt)}<br><span class="cell-sub">${esc(c.scannedOutBy)}</span></td><td class="n">${kg(c.weight)}</td></tr>`).join('')}
+    ${r.used.length ? `<section class="panel"><h3>Coils used</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Coil</th><th>Size</th><th>Scanned out</th><th class="n">Weight</th><th></th></tr></thead><tbody>
+      ${r.used.map(c => `<tr><td><b>${esc(c.coilId)}</b><br><span class="cell-sub">${esc(c.supplier)}${c.consignment ? ', consignment' : ''}</span></td><td>${c.width} × ${bmt(c.thickness)}</td><td>${fmtDate(c.scannedOutAt)}<br><span class="cell-sub">${esc(c.scannedOutBy)}</span>${c.countsIn ? `<br><span class="cell-sub">Pushed here from ${esc(monthLong(monthKey(new Date(c.scannedOutAt))))}</span>` : ''}</td><td class="n">${kg(c.weight)}</td><td class="n">${moveMonthBtn(c, isCurrent)}</td></tr>`).join('')}
       </tbody></table></div></section>` : ''}
     <section class="panel"><h3>Saved in Google Drive</h3>
       ${r.files.length ? `<ul class="files">${r.files.slice().reverse().map(f => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a> <span class="sec-sub">${fmtDate(f.created, true)}</span></li>`).join('')}</ul>` : '<p class="sec-sub">No PDFs saved for this month yet.</p>'}
     </section>`;
   $('#month-sel').onchange = e => { S.reportMonth = e.target.value; renderMonthly(); };
   main.querySelectorAll('[data-pdf]').forEach(b => b.onclick = () => downloadPdf(b, b.dataset.pdf, b.dataset.sup));
+  main.querySelectorAll('[data-push], [data-unpush]').forEach(b => b.onclick = () => moveCoilMonth(b.hasAttribute('data-push'), b.dataset.push || b.dataset.unpush));
+}
+
+// Push a used coil into next month's usage (e.g. the supplier did their consignment check early), or move it back
+function moveMonthBtn(c, isCurrent) {
+  const style = 'style="height:36px;padding:0 12px;font-size:14px;white-space:nowrap"';
+  if (c.countsIn) return `<button class="btn" type="button" data-unpush="${esc(c.key)}" ${style}>Move back</button>`;
+  if (isCurrent) return `<button class="btn" type="button" data-push="${esc(c.key)}" ${style}>Push to next month</button>`;
+  return '';
+}
+function moveCoilMonth(push, key) {
+  const c = S.report && S.report.used.find(x => x.key === key); if (!c) return;
+  const from = monthLong(S.reportMonth), to = monthLong(nextMonthKey(monthKey(new Date(c.scannedOutAt))));
+  const title = push ? `Push coil ${c.coilId} to ${to}?` : `Move coil ${c.coilId} back to ${monthLong(monthKey(new Date(c.scannedOutAt)))}?`;
+  const body = push
+    ? `It keeps its real scan-out date, but counts in ${to} usage instead of ${from}. It comes off ${from}'s usage and statement and shows as still in stock at the end of ${from}.`
+    : `It goes back to counting in the month it was actually scanned out.`;
+  confirmSheet(title, body, push ? 'Push to ' + to : 'Move back', async () => {
+    const upd = await api('setCountsIn', { key, push });
+    if (upd.countsIn && upd.countsIn !== S.month) S.coils = S.coils.filter(x => x.key !== upd.key); else upsertCoil(upd);
+    S.months = null; S.report = null;
+    renderMonthly();
+    toast(push ? `Coil ${upd.coilId} pushed to ${to}.` : `Coil ${upd.coilId} moved back.`);
+  });
 }
 
 // Consignment is priced per size, so weights are only totalled within the same width × thickness
@@ -1129,7 +1157,7 @@ function demoApi(action, req) {
       if ((e = needUser())) return e;
       const mk = monthKey(new Date());
       return ok({ user: { name: me.name, role: me.role }, suppliers: db.suppliers, month: mk,
-        coils: db.coils.filter(c => c.status === 'In stock' || (c.scannedOutAt && monthKey(new Date(c.scannedOutAt)) === mk)) });
+        coils: db.coils.filter(c => c.status === 'In stock' || (c.scannedOutAt && effMonth(c) === mk)) });
     }
     case 'findCoil': {
       if ((e = needUser())) return e;
@@ -1141,7 +1169,7 @@ function demoApi(action, req) {
       const c = db.coils.find(x => x.key === req.key);
       if (!c) return fail('That coil isn\'t in the system any more. Refresh the list.');
       if (c.status !== 'In stock') return fail('Coil ' + c.coilId + ' was already scanned out by ' + c.scannedOutBy + '.');
-      Object.assign(c, { status: 'Used', scannedOutAt: new Date().toISOString(), scannedOutBy: me.name });
+      Object.assign(c, { status: 'Used', scannedOutAt: new Date().toISOString(), scannedOutBy: me.name, countsIn: '' });
       return ok(c);
     }
     case 'signIn': {
@@ -1162,7 +1190,13 @@ function demoApi(action, req) {
     }
     case 'returnToStock': {
       if ((e = needAdmin())) return e;
-      const c = db.coils.find(x => x.key === req.key); Object.assign(c, { status: 'In stock', scannedOutAt: '', scannedOutBy: '' }); return ok(c);
+      const c = db.coils.find(x => x.key === req.key); Object.assign(c, { status: 'In stock', scannedOutAt: '', scannedOutBy: '', countsIn: '' }); return ok(c);
+    }
+    case 'setCountsIn': {
+      if ((e = needAdmin())) return e;
+      const c = db.coils.find(x => x.key === req.key); if (!c) return fail('Coil not found.');
+      if (c.status !== 'Used' || !c.scannedOutAt) return fail('Only coils that have been scanned out can be moved between months.');
+      c.countsIn = req.push ? nextMonthKey(monthKey(new Date(c.scannedOutAt))) : ''; return ok(c);
     }
     case 'deleteCoil': {
       if ((e = needAdmin())) return e;
@@ -1199,15 +1233,15 @@ function demoApi(action, req) {
     case 'months': {
       if ((e = needAdmin())) return e;
       const set = new Set([monthKey(new Date())]);
-      db.coils.forEach(c => { if (c.scannedOutAt) set.add(monthKey(new Date(c.scannedOutAt))); });
+      db.coils.forEach(c => { if (c.scannedOutAt) set.add(effMonth(c)); });
       return ok([...set].sort().reverse().map(k => ({ key: k, label: new Date(k + '-15T00:00:00').toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' }) })));
     }
     case 'monthReport': {
       if ((e = needAdmin())) return e;
       const mk = req.month;
       const sum = l => l.reduce((t, c) => t + c.weight, 0);
-      const used = db.coils.filter(c => c.status === 'Used' && monthKey(new Date(c.scannedOutAt)) === mk).sort((a, b) => a.scannedOutAt.localeCompare(b.scannedOutAt));
-      const stock = db.coils.filter(c => monthKey(new Date(c.signedInAt)) <= mk && (c.status === 'In stock' || monthKey(new Date(c.scannedOutAt)) > mk));
+      const used = db.coils.filter(c => c.status === 'Used' && effMonth(c) === mk).sort((a, b) => a.scannedOutAt.localeCompare(b.scannedOutAt));
+      const stock = db.coils.filter(c => monthKey(new Date(c.signedInAt)) <= mk && (c.status === 'In stock' || effMonth(c) > mk));
       const spec = {};
       used.forEach(c => { const k = [c.supplier, c.width, c.thickness].join('|'); spec[k] = spec[k] || { supplier: c.supplier, width: c.width, thickness: c.thickness, count: 0, kg: 0 }; spec[k].count++; spec[k].kg += c.weight; });
       const consNames = new Set(db.suppliers.filter(s => s.consignment).map(s => s.name));
